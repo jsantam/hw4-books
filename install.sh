@@ -172,6 +172,12 @@ for k in CANVAS_TOKEN CANVAS_COURSE_ID; do
 done
 
 say "4/6 model + tool restrictions"
+# Maritime builds config.yaml at every boot from HERMES_INFERENCE_PROVIDER / HERMES_INFERENCE_MODEL; the durable
+# way to run on Claude is to set those (plus ANTHROPIC_API_KEY) in the agent's Settings tab.
+echo "    boot-time provider/model from Maritime env: ${HERMES_INFERENCE_PROVIDER:-unset} / ${HERMES_INFERENCE_MODEL:-unset}"
+if [ "${HERMES_INFERENCE_PROVIDER:-}" != "anthropic" ]; then
+  TODO+=("in Maritime Settings add HERMES_INFERENCE_PROVIDER=anthropic, HERMES_TUI_PROVIDER=anthropic, HERMES_INFERENCE_MODEL=$MODEL (not secret) and ANTHROPIC_API_KEY (secret), then Restart")
+fi
 if [ -n "${ANTHROPIC_API_KEY:-}" ] && ! has_env ANTHROPIC_API_KEY; then set_env ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"; fi
 if has_env ANTHROPIC_API_KEY; then
   SET_MODEL=1; echo "    ANTHROPIC_API_KEY present"
