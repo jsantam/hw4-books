@@ -1,17 +1,20 @@
-"""Minimal Canvas REST client: only the discussion endpoints this homework needs.
+"""Minimal Canvas REST client: only the discussion endpoints this homework needs. Standard library only.
 
 Reads are retried with exponential backoff. Writes (POST) are NEVER retried blindly:
 if a write's outcome is unknown (timeout, dropped connection, 5xx), we raise AmbiguousWrite
-and the cycle reconciles by re-reading the forum before doing anything else.
+and the caller reconciles by re-reading the forum before doing anything else.
 """
 import html
+import json
 import random
 import re
+import socket
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from html.parser import HTMLParser
 from urllib.parse import urlparse
-
-import requests
 
 
 class CanvasError(Exception):
@@ -26,13 +29,38 @@ class AmbiguousWrite(CanvasError):
     """A write was sent but we don't know whether Canvas saved it."""
 
 
+class _Response:
+    def __init__(self, status, body, headers):
+        self.status_code, self._body, self.headers = status, body, headers
+
+    def json(self):
+        try:
+            return json.loads(self._body.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            raise ValueError("malformed JSON")
+
+    @property
+    def links(self):
+        out = {}
+        for part in (self.headers.get("Link") or "").split(","):
+            m = re.match(r'\s*<([^>]+)>\s*;\s*rel="?(\w+)"?', part)
+            if m:
+                out[m.group(2)] = {"url": m.group(1)}
+        return out
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):  # never follow a redirect with the bearer token attached
+        return None
+
+
 class CanvasClient:
     def __init__(self, base_url, token, *, timeout=20.0, max_retries=3, backoff_base=2.0,
                  session=None, sleep=time.sleep, log=None):
         self.base_url = base_url.rstrip("/")
         self._host = urlparse(self.base_url).netloc
-        self._session = session or requests.Session()
-        self._session.headers["Authorization"] = f"Bearer {token}"
+        self._token = token
+        self._opener = session or urllib.request.build_opener(_NoRedirect())
         self.timeout = timeout
         self.max_retries = max_retries
         self.backoff_base = backoff_base
@@ -43,8 +71,24 @@ class CanvasClient:
     def _url(self, path):
         return path if path.startswith("http") else f"{self.base_url}{path}"
 
+    def _request(self, method, url, data=None):
+        """One HTTP exchange. Returns _Response for any HTTP status; raises socket/URL errors."""
+        body = urllib.parse.urlencode(data).encode() if data is not None else None
+        req = urllib.request.Request(url, data=body, method=method, headers={
+            "Authorization": f"Bearer {self._token}", "Accept": "application/json", "User-Agent": "hw4-books-agent"})
+        if body is not None:
+            req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        try:
+            with self._opener.open(req, timeout=self.timeout) as r:
+                return _Response(r.status, r.read(), r.headers)
+        except urllib.error.HTTPError as e:
+            return _Response(e.code, e.read() if e.fp else b"", e.headers)
+
     def _backoff(self, attempt, retry_after=None):
-        delay = float(retry_after) if retry_after else self.backoff_base * (2 ** attempt)
+        try:
+            delay = float(retry_after) if retry_after else self.backoff_base * (2 ** attempt)
+        except ValueError:
+            delay = self.backoff_base * (2 ** attempt)
         delay = min(delay, 60.0) + random.uniform(0, 0.5)
         self._log("backoff", attempt=attempt + 1, delay_s=round(delay, 2))
         self._sleep(delay)
@@ -54,10 +98,12 @@ class CanvasClient:
         url = self._url(path)
         if urlparse(url).netloc != self._host:  # never send the token to another host
             raise CanvasError("refusing to follow a URL off the Canvas host")
-        last = None
+        if params:
+            url += ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
+        last, r = None, None
         for attempt in range(self.max_retries + 1):
             try:
-                r = self._session.get(url, params=params, timeout=self.timeout)
+                r = self._request("GET", url)
                 if r.status_code == 429 or r.status_code >= 500:
                     last = f"HTTP {r.status_code}"
                 elif r.status_code >= 400:
@@ -67,9 +113,8 @@ class CanvasClient:
                         return r.json(), r
                     except ValueError:
                         last = "malformed JSON"
-            except (requests.Timeout, requests.ConnectionError) as e:
-                last = type(e).__name__
-                r = None
+            except (socket.timeout, TimeoutError, urllib.error.URLError, ConnectionError, OSError) as e:
+                last, r = type(e).__name__, None
             self._log("read_retry", path=path, reason=last)
             if attempt < self.max_retries:
                 self._backoff(attempt, r.headers.get("Retry-After") if r is not None else None)
@@ -89,11 +134,11 @@ class CanvasClient:
     def _post(self, path, data):
         """Single-attempt POST. Unknown outcome -> AmbiguousWrite; caller must reconcile."""
         try:
-            r = self._session.post(self._url(path), data=data, timeout=self.timeout)
-        except requests.Timeout:
+            r = self._request("POST", self._url(path), data)
+        except (socket.timeout, TimeoutError):
             raise AmbiguousWrite(f"POST {path} timed out")
-        except requests.ConnectionError:
-            raise AmbiguousWrite(f"POST {path} connection error")
+        except (urllib.error.URLError, ConnectionError, OSError) as e:
+            raise AmbiguousWrite(f"POST {path} connection error: {type(e).__name__}")
         if r.status_code == 429:
             raise TransientError("POST rate limited by Canvas (not applied)")
         if r.status_code >= 500:
