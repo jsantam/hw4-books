@@ -40,9 +40,9 @@ near-duplicates), 2 writes per cycle, 3 per rolling hour, a fresh read of the fo
 
 ## Install on Maritime
 
-1. Create a **Hermes** agent from the template, add secret env vars `CANVAS_TOKEN`, `CANVAS_COURSE_ID`,
-   `ANTHROPIC_API_KEY` in Settings.
+1. Create a **Hermes** agent from the template, then in its Console run `hermes config set CANVAS_TOKEN <token>`,
+   `hermes config set CANVAS_COURSE_ID <id>` and `hermes config set ANTHROPIC_API_KEY <key>` (stored in Hermes' private .env).
 2. In the agent's Console: `curl -fsSL https://raw.githubusercontent.com/jsantam/hw4-books/main/install.sh -o /tmp/install.sh && bash /tmp/install.sh`
-3. Restart the agent. Posting stays off (`HW4_DRY_RUN` defaults to 1) until `HW4_DRY_RUN=0` is added in Settings.
+3. Restart the agent. Posting stays off (`HW4_DRY_RUN` defaults to 1) until `hermes config set HW4_DRY_RUN 0` is run in the Console.
 
 Re-run step 2 to update code. State lives in `$HERMES_HOME/hw4-state` (Maritime's persistent disk).

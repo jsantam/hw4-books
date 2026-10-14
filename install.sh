@@ -118,5 +118,5 @@ if [ ${#TODO[@]} -gt 0 ]; then
   for t in "${TODO[@]}"; do echo "    $t"; done
   echo "then re-run:  bash /tmp/install.sh"
 else
-  echo "Done. Posting is OFF until HW4_DRY_RUN=0 is set in Maritime Settings. Click Restart in Maritime so the gateway reloads config."
+  echo "Done. Posting is OFF until you run: hermes config set HW4_DRY_RUN 0   (then Restart the agent)."
 fi

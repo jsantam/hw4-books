@@ -65,10 +65,11 @@ class Config:
             raise SystemExit("CANVAS_BASE_URL must be https://canvas.mit.edu")
         self.token = os.environ.get("CANVAS_TOKEN") or _env_file_value("CANVAS_TOKEN")
         self.course = (os.environ.get("CANVAS_COURSE_ID") or _env_file_value("CANVAS_COURSE_ID")).strip()
-        self.topic_id = (os.environ.get("HW4_TOPIC_ID") or "").strip()
+        self.topic_id = (os.environ.get("HW4_TOPIC_ID") or _env_file_value("HW4_TOPIC_ID")).strip()
         home = os.environ.get("HERMES_HOME") or os.path.expanduser("~/.hermes")
         self.state_dir = Path(os.environ.get("HW4_STATE_DIR", Path(home) / "hw4-state")).resolve()
-        self.dry_run = os.environ.get("HW4_DRY_RUN", "1") != "0"
+        # posting is OFF unless HW4_DRY_RUN=0 is set (environment, or Hermes' .env via `hermes config set HW4_DRY_RUN 0`)
+        self.dry_run = (os.environ.get("HW4_DRY_RUN") or _env_file_value("HW4_DRY_RUN") or "1") != "0"
         self.deadline_hours = float(os.environ.get("HW4_DEADLINE_HOURS", "48"))
         self.max_writes_per_hour = 3
         self.max_writes_per_cycle = int(os.environ.get("HW4_MAX_WRITES_PER_CYCLE", "2"))
