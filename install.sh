@@ -39,7 +39,21 @@ has_env() { [ -n "${!1:-}" ] || { [ -f "$ENV_FILE" ] && grep -q "^$1=." "$ENV_FI
 # the Console shell may not have `hermes` on PATH: look for it, otherwise degrade gracefully
 HERMES_BIN="$(command -v hermes 2>/dev/null || true)"
 [ -n "$HERMES_BIN" ] || HERMES_BIN="$(find / -maxdepth 7 -type f -name hermes -perm -u+x 2>/dev/null | head -1 || true)"
-hermes() { if [ -n "$HERMES_BIN" ]; then "$HERMES_BIN" "$@"; else return 127; fi; }
+gateway_user() {
+  local u; u="$(ps -eo user,args 2>/dev/null | grep -m1 '[h]ermes' | awk '{print $1}')"
+  [ -n "$u" ] || u="$(stat -c %U "$HERMES_HOME" 2>/dev/null)"; echo "${u:-$(id -un)}"
+}
+# run the hermes CLI as the gateway's own user (the Console is root), so files it writes stay readable
+hermes() {
+  [ -n "$HERMES_BIN" ] || return 127
+  local u; u="$(gateway_user)"
+  if [ "$(id -un)" = "root" ] && [ "$u" != "root" ] && command -v su >/dev/null; then
+    local q=""; for a in "$@"; do q="$q $(printf '%q' "$a")"; done
+    su -s /bin/bash "$u" -c "export HOME=$(printf '%q' "$HERMES_HOME") HERMES_HOME=$(printf '%q' "$HERMES_HOME"); exec $(printf '%q' "$HERMES_BIN")$q"
+  else
+    "$HERMES_BIN" "$@"
+  fi
+}
 
 # write KEY=VALUE into Hermes' private .env (replace if present). Value is never printed.
 set_env() {
@@ -84,8 +98,33 @@ EOF
 # `bash /tmp/install.sh model [name]` : switch the agent to Claude (default claude-sonnet-4-6) and exit
 if [ "${1:-}" = "model" ]; then
   M="${2:-$MODEL}"
-  if [ -n "$HERMES_BIN" ] && hermes config set model "anthropic/$M" >/dev/null 2>&1; then echo "    model set to anthropic/$M (via hermes)"; else set_model_textual "$M"; fi
+  # Maritime regenerates config.yaml on every boot (OpenAI via its proxy), so the durable place for the
+  # model choice is a pin on the cron job itself; the config edit below only helps until the next restart.
+  if [ -n "$HERMES_BIN" ] && hermes cron edit hw4-cycle --provider anthropic --model "$M" 2>&1 | sed 's/^/    /'; then
+    echo "    cron job hw4-cycle pinned to anthropic/$M"
+  else
+    echo "    could not pin the job (is it created yet?)"
+  fi
+  if [ -n "$HERMES_BIN" ] && hermes config set model "anthropic/$M" >/dev/null 2>&1; then echo "    config.yaml model set to anthropic/$M (until next restart)"; else set_model_textual "$M"; fi
   fix_owner; exit 0
+fi
+
+# `bash /tmp/install.sh run` : run one cycle right now, as the gateway user, and show the tool's log
+if [ "${1:-}" = "run" ]; then
+  [ -n "$HERMES_BIN" ] || { echo "hermes CLI not found"; exit 127; }
+  echo "==> running the hw4-cycle job now (synchronous; may take a few minutes)"
+  hermes cron run hw4-cycle 2>&1 | tail -n 60
+  echo; echo "==> tool log (last 40 lines, secrets redacted)"
+  tail -n 40 "$STATE_DIR/logs/hw4.jsonl" 2>/dev/null | cut -c1-600 || echo "    no log yet"
+  fix_owner; exit 0
+fi
+
+# `bash /tmp/install.sh log` : recent cycles, writes and requests, plus the job's own output
+if [ "${1:-}" = "log" ]; then
+  tail -n 60 "$STATE_DIR/logs/hw4.jsonl" 2>/dev/null | cut -c1-600 || echo "    no tool log yet"
+  echo; echo "==> hermes cron job output files"; ls -t "$HERMES_HOME"/cron/output/*/ 2>/dev/null | head -5
+  f="$(ls -t "$HERMES_HOME"/cron/output/*/* 2>/dev/null | head -1)"; [ -n "$f" ] && { echo "--- $f"; tail -c 4000 "$f"; echo; }
+  exit 0
 fi
 
 # `bash /tmp/install.sh hermes <args>` : run the hermes CLI even when it is not on this shell's PATH
@@ -194,6 +233,9 @@ else
   OUT="$(hermes cron create "every 3h" "$PROMPT" --skill hw4-books --name hw4-cycle --deliver local 2>&1)" && {
     echo "$OUT"; echo "$OUT" | sed -n 's/^Created job: *\([a-f0-9]*\).*/\1/p' | head -1 > "$STATE_DIR/cron_job_id"; echo "    created hw4-cycle"; } \
     || echo "    could not create the job: $OUT"
+fi
+if [ -n "$HERMES_BIN" ] && [ "$SET_MODEL" = 1 ]; then
+  hermes cron edit hw4-cycle --provider anthropic --model "$MODEL" >/dev/null 2>&1 && echo "    job pinned to anthropic/$MODEL (survives restarts)" || echo "    could not pin the job's model; run: bash /tmp/install.sh model"
 fi
 
 say "6/6 self-check (read-only, no posting)"
