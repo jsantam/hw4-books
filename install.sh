@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install / update the HW4 "Books" skill on a Hermes agent (run inside the agent's Console on Maritime).
 #
-#   bash <(curl -fsSL https://raw.githubusercontent.com/jsantam/hw4-books/main/install.sh)
+#   curl -fsSL https://raw.githubusercontent.com/jsantam/hw4-books/main/install.sh -o /tmp/install.sh && bash /tmp/install.sh
 #
 # Idempotent: re-running updates the code and leaves state, cron job and secrets alone.
 # Nothing secret is printed. Override with env: HW4_REPO, HW4_BRANCH, HW4_MODEL.
