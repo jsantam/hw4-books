@@ -40,6 +40,40 @@ EOF
   echo "    $1 saved to Hermes .env"
 }
 
+# edit the `model:` block of config.yaml without a YAML library (provider + default only)
+set_model_textual() {
+  touch "$CFG"
+  MODEL="$1" python3 - "$CFG" <<'EOF'
+import os, re, sys
+p, model = sys.argv[1], os.environ["MODEL"]
+lines = open(p, encoding="utf-8").read().splitlines()
+out, i, done = [], 0, False
+while i < len(lines):
+    l = lines[i]
+    if re.match(r"^model:\s*$", l):
+        out.append(l); i += 1
+        block = []
+        while i < len(lines) and (lines[i].startswith((" ", "\t")) or not lines[i].strip()):
+            block.append(lines[i]); i += 1
+        block = [b for b in block if not re.match(r"^\s+(provider|default|model):", b)]
+        out += ["  provider: anthropic", f"  default: {model}"] + block
+        done = True
+        continue
+    out.append(l); i += 1
+if not done:
+    out += ["model:", "  provider: anthropic", f"  default: {model}"]
+open(p, "w", encoding="utf-8").write("\n".join(out).rstrip("\n") + "\n")
+print(f"    config.yaml model -> anthropic/{model}")
+EOF
+}
+
+# `bash /tmp/install.sh model [name]` : switch the agent to Claude (default claude-sonnet-4-6) and exit
+if [ "${1:-}" = "model" ]; then
+  M="${2:-$MODEL}"
+  if [ -n "$HERMES_BIN" ] && hermes config set model "anthropic/$M" >/dev/null 2>&1; then echo "    model set to anthropic/$M (via hermes)"; else set_model_textual "$M"; fi
+  exit 0
+fi
+
 # `bash /tmp/install.sh set KEY VALUE` : store one secret/setting and exit
 if [ "${1:-}" = "set" ]; then
   [ $# -eq 3 ] || { echo "usage: bash /tmp/install.sh set KEY VALUE"; exit 2; }
@@ -121,9 +155,10 @@ agent:
 terminal:
   env_passthrough: [CANVAS_COURSE_ID, CANVAS_TOKEN, HW4_DEADLINE_HOURS, HW4_DRY_RUN, HW4_TOPIC_ID]
 EOF
-  if [ "$SET_MODEL" = 1 ] && ! grep -q '^model:' "$CFG"; then printf 'model:\n  provider: anthropic\n  default: %s\n' "$MODEL" >> "$CFG"; echo "    model anthropic/$MODEL appended"; fi
+  [ "$SET_MODEL" = 1 ] && set_model_textual "$MODEL"
   echo "    config.yaml: appended agent/terminal blocks (no YAML library found)"
 else
+  [ "$SET_MODEL" = 1 ] && set_model_textual "$MODEL"
   echo "    config.yaml already has agent/terminal sections; left unchanged (no YAML library to merge)"
   TODO+=("check $CFG: agent.disabled_toolsets should include web, browser, delegation, messaging; terminal.env_passthrough should include CANVAS_TOKEN and CANVAS_COURSE_ID")
 fi
