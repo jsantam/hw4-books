@@ -20,6 +20,20 @@ CFG="$HERMES_HOME/config.yaml"
 TODO=()
 
 say() { printf '\n==> %s\n' "$*"; }
+
+# The Maritime Console runs as root while the Hermes gateway runs as its own user: everything we write
+# under HERMES_HOME must end up owned by that user or the gateway cannot read its config and secrets.
+fix_owner() {
+  local u
+  u="$(ps -eo user,args 2>/dev/null | grep -m1 '[h]ermes' | awk '{print $1}')"
+  [ -n "$u" ] || u="$(stat -c %U "$HERMES_HOME" 2>/dev/null)"
+  if [ -n "$u" ] && [ "$u" != "$(id -un)" ]; then
+    chown -R "$u" "$HERMES_HOME" 2>/dev/null || true
+  fi
+  [ -f "$ENV_FILE" ] && chmod 600 "$ENV_FILE"
+  [ -f "$CFG" ] && chmod 644 "$CFG"
+  echo "    files under $HERMES_HOME owned by ${u:-$(id -un)}"
+}
 has_env() { [ -n "${!1:-}" ] || { [ -f "$ENV_FILE" ] && grep -q "^$1=." "$ENV_FILE"; }; }
 
 # the Console shell may not have `hermes` on PATH: look for it, otherwise degrade gracefully
@@ -71,7 +85,7 @@ EOF
 if [ "${1:-}" = "model" ]; then
   M="${2:-$MODEL}"
   if [ -n "$HERMES_BIN" ] && hermes config set model "anthropic/$M" >/dev/null 2>&1; then echo "    model set to anthropic/$M (via hermes)"; else set_model_textual "$M"; fi
-  exit 0
+  fix_owner; exit 0
 fi
 
 # `bash /tmp/install.sh hermes <args>` : run the hermes CLI even when it is not on this shell's PATH
@@ -83,7 +97,7 @@ fi
 # `bash /tmp/install.sh set KEY VALUE` : store one secret/setting and exit
 if [ "${1:-}" = "set" ]; then
   [ $# -eq 3 ] || { echo "usage: bash /tmp/install.sh set KEY VALUE"; exit 2; }
-  set_env "$2" "$3"; exit 0
+  set_env "$2" "$3"; fix_owner; exit 0
 fi
 
 say "1/6 fetching code ($REPO, branch $BRANCH)"
@@ -186,6 +200,8 @@ say "6/6 self-check (read-only, no posting)"
 if [ -n "$HERMES_BIN" ] && hermes skills list 2>/dev/null | grep -qi "hw4-books"; then echo "    skill visible to Hermes"; else echo "    skill files installed; Hermes picks them up after Restart"; fi
 HW4_DRY_RUN=1 "$SKILL_DIR/scripts/hw4" status 2>/dev/null | head -c 1200; echo
 
+echo
+fix_owner
 echo
 if [ ${#TODO[@]} -gt 0 ]; then
   echo "TO FINISH, run these in this console (paste real values in place of <...>; they are stored only in Hermes' private .env, never printed):"
