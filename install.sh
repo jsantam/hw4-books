@@ -74,6 +74,12 @@ if [ "${1:-}" = "model" ]; then
   exit 0
 fi
 
+# `bash /tmp/install.sh hermes <args>` : run the hermes CLI even when it is not on this shell's PATH
+if [ "${1:-}" = "hermes" ]; then
+  shift; [ -n "$HERMES_BIN" ] || { echo "hermes CLI not found"; exit 127; }
+  exec "$HERMES_BIN" "$@"
+fi
+
 # `bash /tmp/install.sh set KEY VALUE` : store one secret/setting and exit
 if [ "${1:-}" = "set" ]; then
   [ $# -eq 3 ] || { echo "usage: bash /tmp/install.sh set KEY VALUE"; exit 2; }
@@ -168,10 +174,12 @@ PROMPT="Run one HW4 Books cycle now. Load the hw4-books skill and follow its Pro
 if [ -z "$HERMES_BIN" ]; then
   echo "    hermes CLI not found in this shell; create the job from the agent's Chat tab instead:"
   echo "    ----"; echo "    Create a cron job named hw4-cycle that runs every 3 hours with the hw4-books skill attached and this prompt: $PROMPT"; echo "    ----"
-elif hermes cron list 2>/dev/null | grep -q "hw4-cycle"; then
-  echo "    job hw4-cycle already exists"
+elif [ -s "$STATE_DIR/cron_job_id" ] || hermes cron list 2>/dev/null | grep -q "hw4-cycle"; then
+  echo "    job hw4-cycle already exists (id $(cat "$STATE_DIR/cron_job_id" 2>/dev/null || echo unknown)); not creating another"
 else
-  hermes cron create "every 3h" "$PROMPT" --skill hw4-books --name hw4-cycle --deliver local && echo "    created hw4-cycle" || echo "    could not create the job; ask the agent in its Chat tab to schedule the hw4-books skill every 3 hours"
+  OUT="$(hermes cron create "every 3h" "$PROMPT" --skill hw4-books --name hw4-cycle --deliver local 2>&1)" && {
+    echo "$OUT"; echo "$OUT" | sed -n 's/^Created job: *\([a-f0-9]*\).*/\1/p' | head -1 > "$STATE_DIR/cron_job_id"; echo "    created hw4-cycle"; } \
+    || echo "    could not create the job: $OUT"
 fi
 
 say "6/6 self-check (read-only, no posting)"
