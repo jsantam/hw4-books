@@ -25,7 +25,7 @@ say() { printf '\n==> %s\n' "$*"; }
 # under HERMES_HOME must end up owned by that user or the gateway cannot read its config and secrets.
 fix_owner() {
   local u
-  u="$(ps -eo user,args 2>/dev/null | grep -m1 '[h]ermes' | awk '{print $1}')"
+  u="$(ps -eo user,args 2>/dev/null | grep '[h]ermes gateway' | awk '$1!="root"{print $1; exit}')"
   [ -n "$u" ] || u="$(stat -c %U "$HERMES_HOME" 2>/dev/null)"
   if [ -n "$u" ] && [ "$u" != "$(id -un)" ]; then
     chown -R "$u" "$HERMES_HOME" 2>/dev/null || true
@@ -125,10 +125,21 @@ fi
 # `bash /tmp/install.sh run` : run one cycle right now, as the gateway user, and show the tool's log
 if [ "${1:-}" = "run" ]; then
   [ -n "$HERMES_BIN" ] || { echo "hermes CLI not found"; exit 127; }
-  echo "==> running the hw4-cycle job now (synchronous; may take a few minutes)"
+  echo "==> triggering the hw4-cycle job (the gateway's scheduler picks it up within about a minute)"
+  before="$(wc -l < "$STATE_DIR/logs/hw4.jsonl" 2>/dev/null || echo 0)"
   hermes cron run hw4-cycle 2>&1 | tail -n 60
-  echo; echo "==> tool log (last 40 lines, secrets redacted)"
-  tail -n 40 "$STATE_DIR/logs/hw4.jsonl" 2>/dev/null | cut -c1-600 || echo "    no log yet"
+  echo "==> waiting for the cycle to finish (up to 6 minutes; the tool logs 'end' when done)"
+  for i in $(seq 1 72); do
+    sleep 5
+    now="$(wc -l < "$STATE_DIR/logs/hw4.jsonl" 2>/dev/null || echo 0)"
+    if [ "$now" -gt "$before" ] && tail -n +"$((before + 1))" "$STATE_DIR/logs/hw4.jsonl" | grep -q '"event": *"cycle_end"'; then break; fi
+    [ $((i % 6)) -eq 0 ] && echo "    ... still running ($((i * 5))s)"
+  done
+  echo; echo "==> tool log for this cycle (secrets redacted)"
+  tail -n +"$((before + 1))" "$STATE_DIR/logs/hw4.jsonl" 2>/dev/null | cut -c1-700
+  [ "$(wc -l < "$STATE_DIR/logs/hw4.jsonl" 2>/dev/null || echo 0)" -gt "$before" ] || echo "    no new log lines yet; run: bash /tmp/install.sh log   in a couple of minutes"
+  echo; echo "==> what the agent wrote (job output)"
+  f="$(ls -t "$HERMES_HOME"/cron/output/*/* 2>/dev/null | head -1)"; [ -n "$f" ] && { echo "--- $f"; tail -c 3000 "$f"; echo; }
   fix_owner; exit 0
 fi
 
