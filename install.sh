@@ -95,17 +95,30 @@ print(f"    config.yaml model -> anthropic/{model}")
 EOF
 }
 
+# pin_job MODEL : pin the cron job to Claude when this Hermes build supports per-job models (newer builds do)
+pin_job() {
+  [ -n "$HERMES_BIN" ] || return 1
+  hermes cron edit --help 2>/dev/null | grep -q -- "--model" || return 2
+  hermes cron edit hw4-cycle --provider anthropic --model "$1" >/dev/null 2>&1
+}
+
 # `bash /tmp/install.sh model [name]` : switch the agent to Claude (default claude-sonnet-4-6) and exit
 if [ "${1:-}" = "model" ]; then
   M="${2:-$MODEL}"
-  # Maritime regenerates config.yaml on every boot (OpenAI via its proxy), so the durable place for the
-  # model choice is a pin on the cron job itself; the config edit below only helps until the next restart.
-  if [ -n "$HERMES_BIN" ] && hermes cron edit hw4-cycle --provider anthropic --model "$M" 2>&1 | sed 's/^/    /'; then
-    echo "    cron job hw4-cycle pinned to anthropic/$M"
-  else
-    echo "    could not pin the job (is it created yet?)"
+  # Maritime regenerates config.yaml on every boot from HERMES_INFERENCE_PROVIDER / HERMES_INFERENCE_MODEL,
+  # so the durable setting is those two agent variables; a per-job pin is a bonus where Hermes supports it.
+  pin_job "$M"; rc=$?
+  case $rc in
+    0) echo "    cron job hw4-cycle pinned to anthropic/$M";;
+    2) echo "    this Hermes build has no per-job model setting (fine: the boot model below is what the job uses)";;
+    *) echo "    could not pin the job (is it created yet?)";;
+  esac
+  if [ -n "$HERMES_BIN" ] && hermes config set model "anthropic/$M" >/dev/null 2>&1; then echo "    config.yaml model set to anthropic/$M"; else set_model_textual "$M"; fi
+  echo "    boot-time provider/model from Maritime env: ${HERMES_INFERENCE_PROVIDER:-unset} / ${HERMES_INFERENCE_MODEL:-unset}"
+  if [ "${HERMES_INFERENCE_PROVIDER:-}" != "anthropic" ]; then
+    echo "    NOTE: the agent will go back to ${HERMES_INFERENCE_PROVIDER:-the Maritime default} after a Restart unless its"
+    echo "    HERMES_INFERENCE_PROVIDER=anthropic and HERMES_INFERENCE_MODEL=$M variables are set in Maritime."
   fi
-  if [ -n "$HERMES_BIN" ] && hermes config set model "anthropic/$M" >/dev/null 2>&1; then echo "    config.yaml model set to anthropic/$M (until next restart)"; else set_model_textual "$M"; fi
   fix_owner; exit 0
 fi
 
@@ -241,7 +254,12 @@ else
     || echo "    could not create the job: $OUT"
 fi
 if [ -n "$HERMES_BIN" ] && [ "$SET_MODEL" = 1 ]; then
-  hermes cron edit hw4-cycle --provider anthropic --model "$MODEL" >/dev/null 2>&1 && echo "    job pinned to anthropic/$MODEL (survives restarts)" || echo "    could not pin the job's model; run: bash /tmp/install.sh model"
+  pin_job "$MODEL"; rc=$?
+  case $rc in
+    0) echo "    job pinned to anthropic/$MODEL";;
+    2) echo "    (this Hermes build has no per-job model setting; the job uses the boot model above)";;
+    *) echo "    could not pin the job's model; run: bash /tmp/install.sh model";;
+  esac
 fi
 
 say "6/6 self-check (read-only, no posting)"
