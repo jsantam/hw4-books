@@ -157,7 +157,7 @@ fi
 
 # `bash /tmp/install.sh log` : recent cycles, writes and requests, plus the job's own output
 if [ "${1:-}" = "log" ]; then
-  tail -n 60 "$STATE_DIR/logs/agent.jsonl" 2>/dev/null | cut -c1-600 || echo "    no tool log yet"
+  tail -n 60 "$STATE_DIR/logs/agent.jsonl" 2>/dev/null | cut -c1-2500 || echo "    no tool log yet"
   echo; echo "==> hermes cron job output files"; ls -t "$HERMES_HOME"/cron/output/*/ 2>/dev/null | head -5
   f="$(ls -t "$HERMES_HOME"/cron/output/*/* 2>/dev/null | head -1)"; [ -n "$f" ] && { echo "--- $f"; tail -c 4000 "$f"; echo; }
   exit 0
