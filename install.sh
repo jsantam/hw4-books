@@ -155,6 +155,19 @@ if [ "${1:-}" = "cycle" ]; then
   fix_owner; exit 0
 fi
 
+# `bash /tmp/install.sh offers` : compact list of every classmate offer (id, author, first line), read-only
+if [ "${1:-}" = "offers" ]; then
+  HW4_DRY_RUN=1 "$SKILL_DIR/scripts/hw4" status 2>/dev/null | python3 -c '
+import json,sys
+s=json.load(sys.stdin)
+print(len(s.get("offers",[])),"offers; control",s.get("control_line"),"; phase",s.get("phase"))
+for o in s.get("offers",[]):
+    first=" ".join(o["text"].split())[:150]
+    print(f"{o[\"offer_entry_id\"]:>7}  {o[\"author\"][:22]:<22} r={o[\"replies_in_thread\"]:<3} {first}")
+'
+  exit 0
+fi
+
 # `bash /tmp/install.sh log` : recent cycles, writes and requests, plus the job's own output
 if [ "${1:-}" = "log" ]; then
   tail -n 60 "$STATE_DIR/logs/agent.jsonl" 2>/dev/null | cut -c1-2500 || echo "    no tool log yet"
