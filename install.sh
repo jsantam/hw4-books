@@ -190,6 +190,7 @@ if [ "${1:-}" = "set" ]; then
 fi
 
 say "1/6 fetching code ($REPO, branch $BRANCH)"
+git config --global --add safe.directory "$SRC" 2>/dev/null || true   # the clone may be owned by the gateway user
 if [ -d "$SRC/.git" ]; then
   git -C "$SRC" fetch -q --depth 1 origin "$BRANCH" && git -C "$SRC" reset -q --hard "origin/$BRANCH"
 else
