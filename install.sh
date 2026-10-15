@@ -158,12 +158,13 @@ fi
 # `bash /tmp/install.sh offers` : compact list of every classmate offer (id, author, first line), read-only
 if [ "${1:-}" = "offers" ]; then
   HW4_DRY_RUN=1 "$SKILL_DIR/scripts/hw4" status 2>/dev/null | python3 -c '
-import json,sys
-s=json.load(sys.stdin)
-print(len(s.get("offers",[])),"offers; control",s.get("control_line"),"; phase",s.get("phase"))
-for o in s.get("offers",[]):
-    first=" ".join(o["text"].split())[:150]
-    print(f"{o[\"offer_entry_id\"]:>7}  {o[\"author\"][:22]:<22} r={o[\"replies_in_thread\"]:<3} {first}")
+import json, sys
+s = json.load(sys.stdin)
+offers = s.get("offers", [])
+print(len(offers), "offers; control", s.get("control_line"), "; phase", s.get("phase"))
+for o in offers:
+    first = " ".join(o["text"].split())[:150]
+    print("%7s  %-22s r=%-3s %s" % (o["offer_entry_id"], o["author"][:22], o["replies_in_thread"], first))
 '
   exit 0
 fi
