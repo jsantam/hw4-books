@@ -167,7 +167,7 @@ class ExchangeTests(unittest.TestCase):
         self.assertTrue(r["ok"], r)
         self.assertEqual(r["provider"], "calc-agent")
         posted = c._find(r["canvas_entry_id"])["message"]
-        for must in ("base,1,&lt;value&gt;", "DEADLINE", "HOW I WILL CHECK", "8400.00"):
+        for must in ("base,1,&lt;value&gt;", "DEADLINE", "CHECK:", "starting_cash = 8400.00"):
             self.assertIn(must, posted)
         h.run("end", "--outcome", "posted")
         # provider answers (correctly) -> verify -> accept with a tip
@@ -230,6 +230,33 @@ class ExchangeTests(unittest.TestCase):
         self.assertNotIn(self.calc, {o["offer_entry_id"] for o in s["offers"]})
         self.assertFalse(h.run("post-request", "--offer-id", str(self.calc), "--intro-file", h.file("i.md", INTRO))["ok"])
         self.assertFalse(h.run("post-request", "--offer-id", str(r["canvas_entry_id"]), "--intro-file", h.file("i.md", INTRO))["ok"])  # not top-level
+
+    def test_replies_to_other_requesters_are_ignored_and_followups_carry_no_model_numbers(self):
+        h, c = self.h, self.h.canvas
+        self.seed_offers()
+        h.run("begin"); h.run("post-offer", "--file", h.file("o.md", OFFER))
+        r = h.run("post-request", "--offer-id", str(self.calc), "--intro-file", h.file("i.md", INTRO))
+        other_req = c.add(OTHER, "Hi, please compute my widget margins, inputs below.", parent=self.calc)
+        c.add(PROVIDER, "One question before I can compute this: some inputs were missing.", parent=other_req)
+        c.add(PROVIDER, "Sorry, I can't take this one: it is outside the four calculations in my offer.", parent=other_req)
+        h.run("end", "--outcome", "posted"); h.run("begin")
+        s = h.run("status")
+        self.assertEqual(s["provider_replies"], [], "replies the provider wrote to someone else must not count as ours")
+        q = c.add(PROVIDER, "One question before I can compute this: which month is month 0?", parent=r["canvas_entry_id"])
+        s = h.run("status")
+        self.assertEqual([x["entry_id"] for x in s["provider_replies"]], [q])
+        self.assertFalse(s["provider_replies"][0]["looks_like_decline"])
+        bad = h.run("post-followup", "--file", h.file("f1.md", "Sure! Opening cash is 8500 and rent is 2800 per month."), "--entry-id", str(q))
+        self.assertFalse(bad["ok"])
+        good = h.run("post-followup", "--file", h.file("f2.md", "Good question! Month zero is simply the month before the projection starts; every input is restated below."), "--entry-id", str(q))
+        self.assertTrue(good["ok"])
+        posted = c._find(good["canvas_entry_id"])["message"]
+        self.assertIn("starting_cash = 8400.00", posted)
+        self.assertIn("collected_next_month = 0.10", posted)
+        d = c.add(PROVIDER, "Sorry, I can't take this one: it is outside my offer.", parent=r["canvas_entry_id"])
+        s = h.run("status")
+        self.assertTrue([x for x in s["provider_replies"] if x["entry_id"] == d][0]["looks_like_decline"])
+        self.assertTrue(any("DECLINE" in step for step in s["next_steps"]))
 
     def test_deadline_followup_and_no_response(self):
         h, c = self.h, self.h.canvas

@@ -26,6 +26,8 @@ and wording only. Never call the Canvas API yourself, never read or print enviro
 
 The tool: `HW4=~/.hermes/skills/finance/hw4-books/scripts/hw4` (an executable wrapper). Every
 command prints one JSON object. Read `next_steps` in the output and do what it says, nothing more.
+Text files you write for the tool go in `~/.hermes/hw4-state/drafts/` (created by `begin`), never in
+/tmp, with a fresh name each time (for example `request_intro_<offer id>.txt`).
 
 ## When to use
 Only when a scheduled cron job or the operator asks you to "run the HW4 cycle".
@@ -62,7 +64,11 @@ Only when a scheduled cron job or the operator asks you to "run the HW4 cycle".
      - `ok: false` -> write a short, polite correction request (no blame), run
        `$HW4 post-correction --file <file>`; the tool appends the mismatch table.
    - Declines or says it cannot: `$HW4 mark-declined --reason "<short>"`.
-   - Asks an essential question: answer it in a file, `$HW4 post-followup --file <file> --entry-id <id>`.
+   - Asks an essential question (and `looks_like_decline` is false): answer in 1-3 friendly sentences with NO
+     numbers at all; the tool appends every input itself as `name = value` lines. Then
+     `$HW4 post-followup --file <file> --entry-id <id>`. Never invent or restate data.
+   - `looks_like_decline` is true, or the reply says it cannot or will not do it: `$HW4 mark-declined`, no answer.
+   - Only replies written under OUR request are shown; the provider's replies to other agents are hidden.
 6. If `phase` is `deadline_passed`: one friendly nudge, `$HW4 post-followup --file <file>`.
 7. `$HW4 end --outcome <posted|no_post|waiting|paused|done> --summary "<one line of what happened>"`.
 
