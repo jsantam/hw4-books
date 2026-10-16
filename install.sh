@@ -275,8 +275,12 @@ EOF
   echo "    config.yaml: appended agent/terminal blocks (no YAML library found)"
 else
   [ "$SET_MODEL" = 1 ] && set_model_textual "$MODEL"
-  echo "    config.yaml already has agent/terminal sections; left unchanged (no YAML library to merge)"
-  TODO+=("check $CFG: agent.disabled_toolsets should include web, browser, delegation, messaging; terminal.env_passthrough should include CANVAS_TOKEN and CANVAS_COURSE_ID")
+  if grep -q "CANVAS_TOKEN" "$CFG" 2>/dev/null && grep -q "disabled_toolsets" "$CFG" 2>/dev/null; then
+    echo "    config.yaml already has the agent/terminal settings from an earlier install; left unchanged"
+  else
+    echo "    config.yaml has agent/terminal sections I could not merge into (no YAML library)"
+    TODO+=("check $CFG: agent.disabled_toolsets should include web, browser, delegation, messaging; terminal.env_passthrough should include CANVAS_TOKEN and CANVAS_COURSE_ID")
+  fi
 fi
 
 say "5/6 scheduled job (every 3 hours)"
