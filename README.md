@@ -3,14 +3,14 @@
 A second agent, built on [Hermes Agent](https://hermes-agent.nousresearch.com) and hosted on Maritime, that
 takes part in the **Homework 4: Agent Services Forum** on `https://canvas.mit.edu`:
 
-- **Service offered:** small-business bookkeeping helper (any small business; the worked example is a fictional bakery). Transactions in, income statement + cash summary +
-  ratio flags + suggestions out. Computed by `bakery_math.statements`, never by the model.
-- **Task delegated:** a three-month, three-scenario cash projection for a fictional bakery (synthetic
-  data in `bakery_math.SYNTHETIC`). The request carries the data, the formulas, the exact result format,
+- **Service offered:** financial statements for small businesses. Transactions in, income statement + cash summary +
+  ratio flags + suggestions out. Computed by `biz_math.statements`, never by the model.
+- **Task delegated:** a three-month, three-scenario cash projection for a fictional small business (synthetic
+  data in `biz_math.SYNTHETIC`). The request carries the data, the formulas, the exact result format,
   how it will be checked and a 48 h deadline.
-- **Verification:** `bakery_math.verify` recomputes all 12 numbers and accepts each within 1.00 USD. A
+- **Verification:** `biz_math.verify` recomputes all 12 numbers and accepts each within 1.00 USD. A
   failing result gets one correction request (max 2), then the agent moves to another provider (max 3).
-- **Final output:** `hw4-state/report.md`, the Bakery Health Report mixing our books with the verified
+- **Final output:** `hw4-state/report.md`, the Small Business Health Report mixing our books with the verified
   projection, plus `evidence.json` with every Canvas entry id and URL.
 
 ## Layout
@@ -21,7 +21,7 @@ skill/hw4-books/              the Hermes skill (SKILL.md = the agent's procedure
   scripts/hw4lib/canvas.py      Canvas REST client (from HW3): retries on reads, never blind-retries writes
   scripts/hw4lib/store.py       SQLite memory: seen entries, writes (idempotency keys), requests, services, runs
   scripts/hw4lib/gates.py       deterministic checks on anything the agent wants to post
-  scripts/hw4lib/bakery_math.py the finance math (service + delegated task + verification)
+  scripts/hw4lib/biz_math.py the finance math (service + delegated task + verification)
   references/service-offer.md   what the offer must say
   data/*.csv                    synthetic sample transactions
 tests/test_hw4.py               offline tests with a fake forum (python3 -m unittest discover -s tests)

@@ -15,7 +15,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "skill" / "hw4-books" / "scripts"))
 
 import hw4  # noqa: E402
-from hw4lib import bakery_math as bm  # noqa: E402
+from hw4lib import biz_math as bm  # noqa: E402
 from hw4lib.canvas import AmbiguousWrite  # noqa: E402
 from hw4lib.logutil import RunLog  # noqa: E402
 from hw4lib.store import Store  # noqa: E402
@@ -26,7 +26,7 @@ OFFER = ("Hi everyone! I'm a bookkeeping helper for small businesses. Input: a p
          "(date, description, category, amount). I return a simple income statement, a cash summary and two or three "
          "plain-English suggestions. Available every 3 hours, any day. 🧁")
 INTRO = ("Hello! Your offer says you do calculations and data analysis, which is exactly what I need. Could you run a "
-         "small three-month cash projection for a fictional bakery? Everything you need is below.")
+         "small three-month cash projection for a fictional small business? Everything you need is below.")
 ACCEPT = "Thank you, this is exactly what I asked for and every number matched my own recomputation. Great work!"
 CORRECT = "Thanks for the quick turnaround! A few numbers don't match what I get from the formulas; could you take another look?"
 
@@ -184,7 +184,7 @@ class ExchangeTests(unittest.TestCase):
         s = h.run("status")
         self.assertEqual(s["phase"], "done")
         rep = h.run("report")
-        self.assertIn("Bakery Health Report", rep["report"])
+        self.assertIn("Small Business Health Report", rep["report"])
         self.assertIn("| base | 3 | 14702.00 | 14702.00 | yes |", rep["report"])
         log = h.run("log")
         self.assertEqual(log["requests"][0]["status"], "accepted")

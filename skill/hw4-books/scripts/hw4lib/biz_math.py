@@ -1,4 +1,4 @@
-"""Deterministic bakery finance math. No LLM anywhere in this file.
+"""Deterministic small-business finance math. No LLM anywhere in this file.
 
 Two jobs:
   1. statements(): the SERVICE we offer. Turn a list of transactions into a simple
@@ -21,9 +21,9 @@ def money(x):
 
 
 # ---------------------------------------------------------------- delegated task
-# The synthetic dataset for the fictional bakery "Pan y Mas". Nothing here is real.
+# The synthetic dataset for a fictional small business. Nothing here is real.
 SYNTHETIC = {
-    "business": "Pan y Mas (fictional bakery, synthetic numbers)",
+    "business": "Sample Co. (fictional small business, synthetic numbers)",
     "currency": "USD",
     "starting_cash": "8400.00",
     "sales_prev_month": "13500.00",          # month 0, only used for the collection lag
@@ -169,15 +169,15 @@ def statements(csv_text, opening_cash="0"):
             expenses[cat] = expenses.get(cat, Decimal(0)) + (-amt)
     total_exp = sum(expenses.values(), Decimal(0))
     net = revenue + other_income - total_exp
-    ingredients = sum(v for k, v in expenses.items() if any(w in k for w in ("ingredient", "flour", "supplies", "cogs", "food")))
+    ingredients = sum(v for k, v in expenses.items() if any(w in k for w in ("ingredient", "cogs", "cost of goods", "goods", "materials", "inventory", "supplies", "food", "flour")))
     flags = []
     if revenue > 0:
         pct = ingredients / revenue
-        flags.append(f"ingredient_share_of_sales={money(pct * 100)}% (typical bakery range 25-35%)")
+        flags.append(f"cost_of_goods_share_of_sales={money(pct * 100)}% (reference range 25-35% for many small retail and food businesses)")
         if pct > Decimal("0.35"):
-            flags.append("ingredient costs above the typical range: check portioning, waste and supplier prices")
+            flags.append("cost of goods above the reference range: check pricing, waste and supplier terms")
         elif pct < Decimal("0.25"):
-            flags.append("ingredient costs unusually low: check that every ingredient purchase was recorded")
+            flags.append("cost of goods unusually low: check that every purchase of goods or materials was recorded")
     if net < 0:
         flags.append("net loss this period: cash is shrinking")
     return {

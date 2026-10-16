@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""HW4 "Books" exchange tool (small-business bookkeeping; the worked example is a bakery). The Hermes agent calls these subcommands; this code owns every
+"""HW4 "Books" exchange tool (financial statements for small businesses). The Hermes agent calls these subcommands; this code owns every
 Canvas read and write, the memory, the limits and the verification math. The agent only supplies
 judgement: the wording of posts, which offer to hire, how to read a provider's reply.
 
@@ -14,7 +14,7 @@ judgement: the wording of posts, which offer to hire, how to read a provider's r
   hw4.py mark-declined --reason R                     provider declined or can't do it: pick another
   hw4.py books --csv-file F [--opening-cash X]        OUR service: statements from transactions
   hw4.py post-service-reply --request-id N --file F [--declined]   answer a request on our offer
-  hw4.py report                     write the final Bakery Health Report + evidence links
+  hw4.py report                     write the final Small Business Health Report + evidence links
   hw4.py end --outcome X [--summary S]
   hw4.py log | reset-halt | spec
 
@@ -32,7 +32,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from hw4lib import bakery_math as bm  # noqa: E402
+from hw4lib import biz_math as bm  # noqa: E402
 from hw4lib.canvas import (AmbiguousWrite, CanvasClient, CanvasError, flatten_view, html_to_text,  # noqa: E402
                            read_control, text_to_html)
 from hw4lib.gates import check_text, sanitize_for_agent  # noqa: E402
@@ -246,7 +246,7 @@ class Exchange:
             s["phase"] = s.get("phase", "done")
             s["accepted_request"] = dict(accepted)
             if not (cfg.state_dir / "report.md").exists():
-                steps.append("Verified work accepted. Run `hw4.py report` to produce the final Bakery Health Report.")
+                steps.append("Verified work accepted. Run `hw4.py report` to produce the final Small Business Health Report.")
             else:
                 steps.append("Delegation complete and report written. Nothing more to do for the delegation.")
         elif req is None:
@@ -544,10 +544,10 @@ class Exchange:
 
     def report(self):
         req = self.store.accepted_request()
-        sample = (Path(__file__).resolve().parent.parent / "data" / "pan_y_mas_sample_transactions.csv").read_text(encoding="utf-8")
+        sample = (Path(__file__).resolve().parent.parent / "data" / "sample_transactions.csv").read_text(encoding="utf-8")
         ours = bm.statements(sample, opening_cash=bm.SYNTHETIC["starting_cash"])
         proj = bm.projection()
-        lines = ["# Bakery Health Report: Pan y Mas (synthetic data)", "",
+        lines = ["# Small Business Health Report: Sample Co. (synthetic data)", "",
                  f"Generated {_iso(time.time())} by the hw4-books agent. All numbers are synthetic.", "",
                  "## 1. Books for September (our own bookkeeping service)", "", bm.statements_markdown(ours), ""]
         if ours["flags"]:
@@ -570,8 +570,8 @@ class Exchange:
         lines += ["", "## 3. What it means", "",
                   f"- Base case ends month 3 with {base['ending_cash'][2]} USD in cash (started at {bm.SYNTHETIC['starting_cash']}).",
                   f"- A 10% sales lift ends at {up['ending_cash'][2]} USD ({bm.money(up['ending_cash'][2] - base['ending_cash'][2])} better).",
-                  f"- A 5-point rise in ingredient cost ends at {ing['ending_cash'][2]} USD ({bm.money(ing['ending_cash'][2] - base['ending_cash'][2])} worse).",
-                  "- Ingredient cost control matters almost as much as selling more: watch waste and supplier prices before chasing volume.", ""]
+                  f"- A 5-point rise in cost of goods ends at {ing['ending_cash'][2]} USD ({bm.money(ing['ending_cash'][2] - base['ending_cash'][2])} worse).",
+                  "- Cost control matters almost as much as selling more: watch waste, pricing and supplier terms before chasing volume.", ""]
         self.cfg.state_dir.mkdir(parents=True, exist_ok=True)
         (self.cfg.state_dir / "report.md").write_text("\n".join(lines), encoding="utf-8")
         ev = self.evidence()
@@ -612,12 +612,12 @@ def inputs_block():
 
 def request_spec(deadline_iso):
     exp = bm.expected_lines()
-    return f"""TASK: project a fictional bakery's cash for months 1-3 under three scenarios. Synthetic data, simple arithmetic.
+    return f"""TASK: project a fictional small business's cash for months 1-3 under three scenarios. Synthetic data, simple arithmetic.
 
 {inputs_block()}
 
 FORMULAS, for each month m = 1, 2, 3
-ingredient_cost = ingredient_ratio x sales_m
+ingredient_cost = ingredient_ratio x sales_m   (ingredient_ratio = cost of goods as a share of sales)
 net_income = sales_m - ingredient_cost - fixed_costs_total
 cash_in = collected_same_month x sales_m + collected_next_month x sales_(m-1)
 cash_out = ingredient_cost + fixed_costs_total
