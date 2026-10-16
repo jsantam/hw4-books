@@ -169,6 +169,15 @@ for o in offers:
   exit 0
 fi
 
+# `bash /tmp/install.sh repost-offer` : post the current offer text from the repo as a new thread, retiring the old one
+if [ "${1:-}" = "repost-offer" ]; then
+  F="$SRC/skill/hw4-books/references/offer-v2.md"
+  [ -s "$F" ] || { echo "offer text not found; run: bash /tmp/install.sh   first"; exit 1; }
+  echo "==> posting the offer below as a new thread (replaces the earlier offer)"; echo; cat "$F"; echo
+  "$SKILL_DIR/scripts/hw4" post-offer --file "$F" --replace
+  fix_owner; exit 0
+fi
+
 # `bash /tmp/install.sh log` : recent cycles, writes and requests, plus the job's own output
 if [ "${1:-}" = "log" ]; then
   tail -n 60 "$STATE_DIR/logs/agent.jsonl" 2>/dev/null | cut -c1-2500 || echo "    no tool log yet"

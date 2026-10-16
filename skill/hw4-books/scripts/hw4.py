@@ -143,13 +143,18 @@ class Exchange:
         w = self.store.verified_write("offer")
         return w["canvas_entry_id"] if w else None
 
+    def own_offer_ids(self):
+        return [w["canvas_entry_id"] for w in self.store.all_writes()
+                if w["kind"] == "offer" and w.get("canvas_entry_id") and w["status"] in ("verified", "posted", "superseded")]
+
     def incoming_requests(self, offer_id):
-        """Entries by others anywhere under our offer thread that we have not answered yet."""
-        if not offer_id:
+        """Entries by others anywhere under any of our offer threads (current or superseded) not answered yet."""
+        mine = set(self.own_offer_ids()) | ({offer_id} if offer_id else set())
+        if not mine:
             return []
         out = []
         for e in self.live:
-            if e["user_id"] == self.me or self.root_of(e["id"]) != offer_id or e["id"] == offer_id:
+            if e["user_id"] == self.me or self.root_of(e["id"]) not in mine or e["id"] in mine:
                 continue
             svc = self.store.service(e["id"])
             if svc and svc["status"] in ("answered", "declined", "ignored"):
@@ -388,15 +393,22 @@ class Exchange:
                 st.set("pending_service", None)
 
     # ---- commands
-    def post_offer(self, text):
+    def post_offer(self, text, replace=False):
         self.read_forum()
-        if self.own_offer_id():
+        if self.own_offer_id() and not replace:
             return {"ok": False, "reason": "offer already posted", "url": self.url(self.own_offer_id())}
         low = text.lower()
         missing = [w for w in ("input", "return", "available") if w not in low]
         if missing:
             return {"ok": False, "reason": f"offer must say what input it needs, what it returns and when it is available (missing: {missing})"}
-        return self.write("offer", None, text)
+        old = self.own_offer_id()
+        res = self.write("offer", None, text)
+        if res.get("ok") and old and res.get("canvas_entry_id"):
+            for w in self.store.all_writes():
+                if w["kind"] == "offer" and w.get("canvas_entry_id") == old:
+                    self.store.update_write(w["idem_key"], "superseded", note=f"replaced by offer {res['canvas_entry_id']}")
+            self.log.event("offer_replaced", old_entry_id=old, new_entry_id=res["canvas_entry_id"])
+        return res
 
     def post_request(self, offer_id, intro):
         self.read_forum()
@@ -658,7 +670,7 @@ def main(argv=None, canvas_factory=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("begin"); sub.add_parser("status"); sub.add_parser("report"); sub.add_parser("log")
     sub.add_parser("reset-halt"); sub.add_parser("spec")
-    p = sub.add_parser("post-offer"); p.add_argument("--file", required=True)
+    p = sub.add_parser("post-offer"); p.add_argument("--file", required=True); p.add_argument("--replace", action="store_true")
     p = sub.add_parser("post-request"); p.add_argument("--offer-id", type=int, required=True); p.add_argument("--intro-file", required=True)
     p = sub.add_parser("verify"); p.add_argument("--entry-id", type=int); p.add_argument("--values-file")
     p = sub.add_parser("post-accept"); p.add_argument("--file", required=True); p.add_argument("--tip", type=int, default=0)
@@ -706,7 +718,7 @@ def main(argv=None, canvas_factory=None):
             if a.cmd in ("begin", "status"):
                 out = ex.status()
             elif a.cmd == "post-offer":
-                out = ex.post_offer(_read(a.file))
+                out = ex.post_offer(_read(a.file), replace=a.replace)
             elif a.cmd == "post-request":
                 out = ex.post_request(a.offer_id, _read(a.intro_file))
             elif a.cmd == "verify":

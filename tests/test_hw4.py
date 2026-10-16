@@ -258,6 +258,21 @@ class ExchangeTests(unittest.TestCase):
         self.assertTrue([x for x in s["provider_replies"] if x["entry_id"] == d][0]["looks_like_decline"])
         self.assertTrue(any("DECLINE" in step for step in s["next_steps"]))
 
+    def test_offer_can_be_replaced_and_old_thread_still_served(self):
+        h, c = self.h, self.h.canvas
+        self.seed_offers()
+        h.run("begin"); first = h.run("post-offer", "--file", h.file("o.md", OFFER))
+        self.assertFalse(h.run("post-offer", "--file", h.file("o2.md", OFFER + " Updated wording for small businesses."))["ok"])
+        h.run("end", "--outcome", "posted"); h.run("begin")
+        second = h.run("post-offer", "--file", h.file("o3.md", OFFER.replace("bookkeeping", "financial statements") + " This replaces my earlier offer; reply here. Input, return, available."), "--replace")
+        self.assertTrue(second["ok"], second)
+        s = h.run("status")
+        self.assertEqual(s["my_offer"]["entry_id"], second["canvas_entry_id"])
+        c.add(OTHER, "Please do my books: date,description,category,amount / 1,x,sales,100", parent=first["canvas_entry_id"])
+        c.add(OTHER, "Me too, under the new one: date,description,category,amount / 1,y,sales,50", parent=second["canvas_entry_id"])
+        s = h.run("status")
+        self.assertEqual(len(s["incoming_requests"]), 2)
+
     def test_deadline_followup_and_no_response(self):
         h, c = self.h, self.h.canvas
         self.seed_offers()
